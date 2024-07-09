@@ -47,6 +47,8 @@ static int mt7921_thermal_init(struct mt792x_phy *phy)
 	struct device *hwmon;
 	const char *name;
 
+	pr_info("mt7921_thermal_init\n");
+
 	if (!IS_REACHABLE(CONFIG_HWMON))
 		return 0;
 
@@ -69,8 +71,9 @@ mt7921_regd_channel_update(struct wiphy *wiphy, struct mt792x_dev *dev)
 	struct ieee80211_channel *ch;
 	int i, cfreq;
 
+	pr_info("mt7921_regd_channel_update");
+	
 	np = mt76_find_power_limits_node(mdev);
-
 	sband = wiphy->bands[NL80211_BAND_5GHZ];
 	band_np = np ? of_get_child_by_name(np, "txpower-5g") : NULL;
 	for (i = 0; i < sband->n_channels; i++) {
@@ -116,6 +119,8 @@ void mt7921_regd_update(struct mt792x_dev *dev)
 	struct ieee80211_hw *hw = mdev->hw;
 	struct wiphy *wiphy = hw->wiphy;
 
+	pr_info("mt7921_regd_update");
+
 	mt7921_mcu_set_clc(dev, mdev->alpha2, dev->country_ie_env);
 	mt7921_regd_channel_update(wiphy, dev);
 	mt76_connac_mcu_set_channel_domain(hw->priv);
@@ -131,6 +136,7 @@ mt7921_regd_notifier(struct wiphy *wiphy,
 	struct mt792x_dev *dev = mt792x_hw_dev(hw);
 	struct mt76_connac_pm *pm = &dev->pm;
 
+	pr_info("mt7921_regd_notifier");
 	memcpy(dev->mt76.alpha2, request->alpha2, sizeof(dev->mt76.alpha2));
 	dev->mt76.region = request->dfs_region;
 	dev->country_ie_env = request->country_ie_env;
@@ -152,6 +158,8 @@ int mt7921_mac_init(struct mt792x_dev *dev)
 {
 	int i;
 
+	pr_info("mt7921_mac_init");
+
 	mt76_rmw_field(dev, MT_MDP_DCR1, MT_MDP_DCR1_MAX_RX_LEN, 1536);
 	/* enable hardware de-agg */
 	mt76_set(dev, MT_MDP_DCR0, MT_MDP_DCR0_DAMSDU_EN);
@@ -172,6 +180,7 @@ static int __mt7921_init_hardware(struct mt792x_dev *dev)
 {
 	int ret;
 
+	pr_info("__mt7921_init_hardware");
 	/* force firmware operation mode into normal state,
 	 * which should be set before firmware download stage.
 	 */
@@ -194,6 +203,8 @@ out:
 static int mt7921_init_hardware(struct mt792x_dev *dev)
 {
 	int ret, i;
+
+	pr_info("mt7921_init_hardware");
 
 	set_bit(MT76_STATE_INITIALIZED, &dev->mphy.state);
 
@@ -219,6 +230,7 @@ static void mt7921_init_work(struct work_struct *work)
 					      init_work);
 	int ret;
 
+	pr_info("mt7921_init_work");
 	ret = mt7921_init_hardware(dev);
 	if (ret)
 		return;
@@ -256,6 +268,8 @@ int mt7921_register_device(struct mt792x_dev *dev)
 	struct ieee80211_hw *hw = mt76_hw(dev);
 	int ret;
 
+	pr_info("mt7921_register_device");
+	
 	dev->phy.dev = dev;
 	dev->phy.mt76 = &dev->mt76.phy;
 	dev->mt76.phy.priv = &dev->phy;
