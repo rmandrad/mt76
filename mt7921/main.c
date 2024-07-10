@@ -156,7 +156,8 @@ mt7921_init_he_caps(struct mt792x_phy *phy, enum nl80211_band band,
 
 		if (band == NL80211_BAND_6GHZ) {
 			struct ieee80211_supported_band *sband =
-				&phy->mt76->sband_5g.sband;
+				/* was &phy->mt76->sband_5g.sband; */
+				&phy->mt76->sband_6g.sband;
 			struct ieee80211_sta_vht_cap *vht_cap = &sband->vht_cap;
 			struct ieee80211_sta_ht_cap *ht_cap = &sband->ht_cap;
 			u32 exp;
@@ -1099,7 +1100,7 @@ mt7921_set_antenna(struct ieee80211_hw *hw, u32 tx_ant, u32 rx_ant)
 	return 0;
 }
 
-#ifdef CONFIG_PM
+#ifdef CONFIG_PMX
 static int mt7921_suspend(struct ieee80211_hw *hw,
 			  struct cfg80211_wowlan *wowlan)
 {
