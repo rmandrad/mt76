@@ -1100,7 +1100,7 @@ mt7921_set_antenna(struct ieee80211_hw *hw, u32 tx_ant, u32 rx_ant)
 	return 0;
 }
 
-#ifdef CONFIG_PMx
+#ifdef CONFIG_PM
 static int mt7921_suspend(struct ieee80211_hw *hw,
 			  struct cfg80211_wowlan *wowlan)
 {
@@ -1445,7 +1445,7 @@ const struct ieee80211_ops mt7921_ops = {
 	.sched_scan_stop = mt7921_stop_sched_scan,
 	CFG80211_TESTMODE_CMD(mt7921_testmode_cmd)
 	CFG80211_TESTMODE_DUMP(mt7921_testmode_dump)
-#ifdef CONFIG_PMx
+#ifdef CONFIG_PM
 	.suspend = mt7921_suspend,
 	.resume = mt7921_resume,
 	.set_wakeup = mt792x_set_wakeup,
