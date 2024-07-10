@@ -15,7 +15,11 @@
 #include <linux/average.h>
 #include <linux/soc/mediatek/mtk_wed.h>
 #include <net/mac80211.h>
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6,6,0)
+#include <net/page_pool.h>
+#else
 #include <net/page_pool/helpers.h>
+#endif
 #include "util.h"
 #include "testmode.h"
 
@@ -162,8 +166,8 @@ enum mt76_dfs_state {
 
 struct mt76_queue_buf {
 	dma_addr_t addr;
-	u16 len;
-	bool skip_unmap;
+	u16 len:15,
+	    skip_unmap:1;
 };
 
 struct mt76_tx_info {
@@ -414,7 +418,7 @@ struct mt76_rx_tid {
 
 	u8 started:1, stopped:1, timer_pending:1;
 
-	struct sk_buff *reorder_buf[] __counted_by(size);
+	struct sk_buff *reorder_buf[];
 };
 
 #define MT_TX_CB_DMA_DONE		BIT(0)
@@ -1606,18 +1610,6 @@ s8 mt76_get_rate_power_limits(struct mt76_phy *phy,
 			      struct ieee80211_channel *chan,
 			      struct mt76_power_limits *dest,
 			      s8 target_power);
-
-static inline bool mt76_queue_is_rx(struct mt76_dev *dev, struct mt76_queue *q)
-{
-	int i;
-
-	for (i = 0; i < ARRAY_SIZE(dev->q_rx); i++) {
-		if (q == &dev->q_rx[i])
-			return true;
-	}
-
-	return false;
-}
 
 static inline bool mt76_queue_is_wed_tx_free(struct mt76_queue *q)
 {
