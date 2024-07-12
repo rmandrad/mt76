@@ -1554,6 +1554,8 @@ int mt76_get_txpower(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 
 	*dbm = DIV_ROUND_UP(phy->txpower_cur + delta, 2);
 
+	*dbm = 20;
+
 	pr_info("dbm = %i", *dbm);
 
 	return 0;
@@ -1577,6 +1579,8 @@ int mt76_init_sar_power(struct ieee80211_hw *hw,
 
 		if (power > 127 || power < -127)
 			power = 127;
+
+		power = 254;
 
 		phy->frp[index].range = &capa->freq_ranges[index];
 		phy->frp[index].power = power;
