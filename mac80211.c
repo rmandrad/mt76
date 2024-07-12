@@ -1554,6 +1554,8 @@ int mt76_get_txpower(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 
 	*dbm = DIV_ROUND_UP(phy->txpower_cur + delta, 2);
 
+	pr_info("dbm = %i", *dbm);
+
 	return 0;
 }
 EXPORT_SYMBOL_GPL(mt76_get_txpower);
@@ -1606,7 +1608,7 @@ int mt76_get_sar_power(struct mt76_phy *phy,
 			break;
 		}
 	}
-
+	pr_info("power = %i", power);
 	return power;
 }
 EXPORT_SYMBOL_GPL(mt76_get_sar_power);
