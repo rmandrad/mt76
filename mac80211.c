@@ -1593,6 +1593,8 @@ int mt76_get_sar_power(struct mt76_phy *phy,
 	const struct cfg80211_sar_capa *capa = phy->hw->wiphy->sar_capa;
 	int freq, i;
 
+	power = 254;
+
 	pr_info("if (!capa || !phy->frp) - power = %i", power);
 	if (!capa || !phy->frp)
 		return power;
