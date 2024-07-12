@@ -1594,10 +1594,11 @@ int mt76_get_sar_power(struct mt76_phy *phy,
 	int freq, i;
 
 	if (!capa || !phy->frp)
+		pr_info("if (!capa || !phy->frp) - power = %i", power);
 		return power;
 
-	if (power > 127 || power < -127)
-		power = 127;
+	/* if (power > 127 || power < -127)
+		power = 127; */
 
 	freq = ieee80211_channel_to_frequency(chan->hw_value, chan->band);
 	for (i = 0 ; i < capa->num_freq_ranges; i++) {
