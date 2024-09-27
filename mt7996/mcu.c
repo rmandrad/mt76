@@ -14,16 +14,23 @@
 	char *_fw;						\
 	switch (mt76_chip(&(_dev)->mt76)) {			\
 	case 0x7992:						\
-		_fw = MT7992_##name;				\
+		switch ((_dev)->var.type) {			\
+		case MT7992_VAR_TYPE_23:			\
+			_fw = MT7992_##name##_23;		\
+			break;					\
+		default:					\
+			_fw = MT7992_##name;			\
+		}						\
 		break;						\
 	case 0x7990:						\
-		if ((_dev)->var_type == MT7996_VAR_TYPE_233)	\
-			_fw = MT7996_##name##_233;		\
-		else						\
-			_fw = MT7996_##name;			\
-		break;						\
 	default:						\
-		_fw = MT7996_##name;				\
+		switch ((_dev)->var.type) {			\
+		case MT7996_VAR_TYPE_233:			\
+			_fw = MT7996_##name##_233;		\
+			break;					\
+		default:					\
+			_fw = MT7996_##name;			\
+		}						\
 		break;						\
 	}							\
 	_fw;							\
@@ -426,7 +433,7 @@ mt7996_mcu_cca_finish(void *priv, u8 *mac, struct ieee80211_vif *vif)
 	if (!vif->bss_conf.color_change_active || vif->type == NL80211_IFTYPE_STATION)
 		return;
 
-	ieee80211_color_change_finish(vif);
+	ieee80211_color_change_finish(vif, 0);
 }
 
 static void
@@ -1548,9 +1555,6 @@ mt7996_mcu_sta_bfer_he(struct ieee80211_sta *sta, struct ieee80211_vif *vif,
 	u16 mcs_map = le16_to_cpu(pc->he_mcs_nss_supp.rx_mcs_80);
 	u8 nss_mcs = mt7996_mcu_get_sta_nss(mcs_map);
 	u8 snd_dim, sts;
-
-	if (!vc)
-		return;
 
 	bf->tx_mode = MT_PHY_TYPE_HE_SU;
 
@@ -2859,7 +2863,6 @@ out:
 
 static int mt7996_load_ram(struct mt7996_dev *dev)
 {
-	const char *dsp_name;
 	int ret;
 
 	ret = __mt7996_load_ram(dev, "WM", fw_name(dev, FIRMWARE_WM),
@@ -2867,8 +2870,7 @@ static int mt7996_load_ram(struct mt7996_dev *dev)
 	if (ret)
 		return ret;
 
-	dsp_name = is_mt7996(&dev->mt76) ? MT7996_FIRMWARE_DSP : MT7992_FIRMWARE_DSP;
-	ret = __mt7996_load_ram(dev, "DSP", dsp_name,
+	ret = __mt7996_load_ram(dev, "DSP", fw_name(dev, FIRMWARE_DSP),
 				MT7996_RAM_TYPE_DSP);
 	if (ret)
 		return ret;
@@ -3555,7 +3557,7 @@ int mt7996_mcu_set_eeprom(struct mt7996_dev *dev)
 				 &req, sizeof(req), true);
 }
 
-int mt7996_mcu_get_eeprom(struct mt7996_dev *dev, u32 offset)
+int mt7996_mcu_get_eeprom(struct mt7996_dev *dev, u32 offset, u8 *buf, u32 buf_len)
 {
 	struct {
 		u8 _rsv[4];
@@ -3584,15 +3586,21 @@ int mt7996_mcu_get_eeprom(struct mt7996_dev *dev, u32 offset)
 	valid = le32_to_cpu(*(__le32 *)(skb->data + 16));
 	if (valid) {
 		u32 addr = le32_to_cpu(*(__le32 *)(skb->data + 12));
-		u8 *buf = (u8 *)dev->mt76.eeprom.data + addr;
+
+		if (!buf)
+			buf = (u8 *)dev->mt76.eeprom.data + addr;
+		if (!buf_len || buf_len > MT7996_EEPROM_BLOCK_SIZE)
+			buf_len = MT7996_EEPROM_BLOCK_SIZE;
 
 		skb_pull(skb, 48);
-		memcpy(buf, skb->data, MT7996_EEPROM_BLOCK_SIZE);
+		memcpy(buf, skb->data, buf_len);
+	} else {
+		ret = -EINVAL;
 	}
 
 	dev_kfree_skb(skb);
 
-	return 0;
+	return ret;
 }
 
 int mt7996_mcu_get_eeprom_free_block(struct mt7996_dev *dev, u8 *block_num)

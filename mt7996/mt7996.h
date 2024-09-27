@@ -36,6 +36,7 @@
 
 #define MT7996_FIRMWARE_WA_233		"mediatek/mt7996/mt7996_wa_233.bin"
 #define MT7996_FIRMWARE_WM_233		"mediatek/mt7996/mt7996_wm_233.bin"
+#define MT7996_FIRMWARE_DSP_233		MT7996_FIRMWARE_DSP
 #define MT7996_ROM_PATCH_233		"mediatek/mt7996/mt7996_rom_patch_233.bin"
 
 #define MT7992_FIRMWARE_WA		"mediatek/mt7996/mt7992_wa.bin"
@@ -43,9 +44,22 @@
 #define MT7992_FIRMWARE_DSP		"mediatek/mt7996/mt7992_dsp.bin"
 #define MT7992_ROM_PATCH		"mediatek/mt7996/mt7992_rom_patch.bin"
 
+#define MT7992_FIRMWARE_WA_23		"mediatek/mt7996/mt7992_wa_23.bin"
+#define MT7992_FIRMWARE_WM_23		"mediatek/mt7996/mt7992_wm_23.bin"
+#define MT7992_FIRMWARE_DSP_23		"mediatek/mt7996/mt7992_dsp_23.bin"
+#define MT7992_ROM_PATCH_23		"mediatek/mt7996/mt7992_rom_patch_23.bin"
+
 #define MT7996_EEPROM_DEFAULT		"mediatek/mt7996/mt7996_eeprom.bin"
+#define MT7996_EEPROM_DEFAULT_INT	"mediatek/mt7996/mt7996_eeprom_2i5i6i.bin"
 #define MT7996_EEPROM_DEFAULT_233	"mediatek/mt7996/mt7996_eeprom_233.bin"
+#define MT7996_EEPROM_DEFAULT_233_INT	"mediatek/mt7996/mt7996_eeprom_233_2i5i6i.bin"
+
 #define MT7992_EEPROM_DEFAULT		"mediatek/mt7996/mt7992_eeprom.bin"
+#define MT7992_EEPROM_DEFAULT_INT	"mediatek/mt7996/mt7992_eeprom_2i5i.bin"
+#define MT7992_EEPROM_DEFAULT_MIX	"mediatek/mt7996/mt7992_eeprom_2i5e.bin"
+#define MT7992_EEPROM_DEFAULT_23	"mediatek/mt7996/mt7992_eeprom_23.bin"
+#define MT7992_EEPROM_DEFAULT_23_INT	"mediatek/mt7996/mt7992_eeprom_23_2i5i.bin"
+
 #define MT7996_EEPROM_SIZE		7680
 #define MT7996_EEPROM_BLOCK_SIZE	16
 #define MT7996_TOKEN_SIZE		16384
@@ -94,18 +108,26 @@ struct mt7996_sta;
 struct mt7996_dfs_pulse;
 struct mt7996_dfs_pattern;
 
-enum mt7996_var_type {
-	MT7996_VAR_TYPE_444,
-	MT7996_VAR_TYPE_233,
-
-	/* mt7992 */
-	MT7992_VAR_TYPE_44,
-};
-
 enum mt7996_ram_type {
 	MT7996_RAM_TYPE_WM,
 	MT7996_RAM_TYPE_WA,
 	MT7996_RAM_TYPE_DSP,
+};
+
+enum mt7996_var_type {
+	MT7996_VAR_TYPE_444,
+	MT7996_VAR_TYPE_233,
+};
+
+enum mt7992_var_type {
+	MT7992_VAR_TYPE_44,
+	MT7992_VAR_TYPE_23,
+};
+
+enum mt7996_fem_type {
+	MT7996_FEM_EXT,
+	MT7996_FEM_INT,
+	MT7996_FEM_MIX,
 };
 
 enum mt7996_txq_id {
@@ -340,7 +362,10 @@ struct mt7996_dev {
 	spinlock_t reg_lock;
 
 	u8 wtbl_size_group;
-	u8 var_type;
+	struct {
+		u8 type:4;
+		u8 fem:4;
+	} var;
 };
 
 enum {
@@ -417,23 +442,23 @@ mt7996_band_valid(struct mt7996_dev *dev, u8 band)
 	if (is_mt7992(&dev->mt76))
 		return band <= MT_BAND1;
 
-	/* tri-band support */
-	if (band <= MT_BAND2 && dev->var_type)
-		return true;
-
-	return band == MT_BAND0 || band == MT_BAND2;
+	return band <= MT_BAND2;
 }
 
 static inline bool
-mt7996_get_background_radar_cap(struct mt7996_dev *dev)
+mt7996_has_background_radar(struct mt7996_dev *dev)
 {
 	switch (mt76_chip(&dev->mt76)) {
 	case 0x7990:
-		if (dev->var_type == MT7996_VAR_TYPE_233)
+		if (dev->var.type == MT7996_VAR_TYPE_233)
+			return false;
+		break;
+	case 0x7992:
+		if (dev->var.type == MT7992_VAR_TYPE_23)
 			return false;
 		break;
 	default:
-		break;
+		return false;
 	}
 
 	return true;
@@ -502,7 +527,7 @@ int mt7996_mcu_set_fixed_rate_ctrl(struct mt7996_dev *dev,
 int mt7996_mcu_set_fixed_field(struct mt7996_dev *dev, struct ieee80211_vif *vif,
 			       struct ieee80211_sta *sta, void *data, u32 field);
 int mt7996_mcu_set_eeprom(struct mt7996_dev *dev);
-int mt7996_mcu_get_eeprom(struct mt7996_dev *dev, u32 offset);
+int mt7996_mcu_get_eeprom(struct mt7996_dev *dev, u32 offset, u8 *buf, u32 buf_len);
 int mt7996_mcu_get_eeprom_free_block(struct mt7996_dev *dev, u8 *block_num);
 int mt7996_mcu_get_chip_config(struct mt7996_dev *dev, u32 *cap);
 int mt7996_mcu_set_ser(struct mt7996_dev *dev, u8 action, u8 set, u8 band);
