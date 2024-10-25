@@ -28,11 +28,15 @@ static char *mt7996_eeprom_name(struct mt7996_dev *dev)
 	case 0x7992:
 		switch (dev->var.type) {
 		case MT7992_VAR_TYPE_23:
+			dev_warn(dev->mt76.dev, "eeprom 0x7992 MT7992_VAR_TYPE_23\n");
 			if (dev->var.fem == MT7996_FEM_INT)
 				return MT7992_EEPROM_DEFAULT_23_INT;
 			return MT7992_EEPROM_DEFAULT_23;
 		case MT7992_VAR_TYPE_44:
+			dev_warn(dev->mt76.dev, "eeprom 0x7992 MT7992_VAR_TYPE_44\n");
+			return 0;
 		default:
+			dev_warn(dev->mt76.dev, "eeprom 0x7992 MT7992_VAR_TYPE_DEFAULT\n");
 			if (dev->var.fem == MT7996_FEM_INT)
 				return MT7992_EEPROM_DEFAULT_INT;
 			if (dev->var.fem == MT7996_FEM_MIX)
@@ -43,11 +47,15 @@ static char *mt7996_eeprom_name(struct mt7996_dev *dev)
 	default:
 		switch (dev->var.type) {
 		case MT7996_VAR_TYPE_233:
+			dev_warn(dev->mt76.dev, "eeprom 0x7990 MT7996_VAR_TYPE_233\n");
 			if (dev->var.fem == MT7996_FEM_INT)
 				return MT7996_EEPROM_DEFAULT_233_INT;
 			return MT7996_EEPROM_DEFAULT_233;
 		case MT7996_VAR_TYPE_444:
+			dev_warn(dev->mt76.dev, "eeprom 0x7990 MT7996_VAR_TYPE_444\n");
+			return 0;
 		default:
+			dev_warn(dev->mt76.dev, "eeprom 0x7990 MT7996_VAR_TYPE_DEFAULT\n");
 			if (dev->var.fem == MT7996_FEM_INT)
 				return MT7996_EEPROM_DEFAULT_INT;
 			return MT7996_EEPROM_DEFAULT;
