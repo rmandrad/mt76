@@ -297,7 +297,7 @@ out:
 
 	return ret;
 }
-#endif
+#endif /* CONFIG_NET_MEDIATEK_SOC_WED */
 
 int mt7996_mmio_wed_init(struct mt7996_dev *dev, void *pdev_ptr,
 			 bool hif2, int *irq)
@@ -415,12 +415,15 @@ int mt7996_mmio_wed_init(struct mt7996_dev *dev, void *pdev_ptr,
 	wed->wlan.offload_enable = mt76_wed_offload_enable;
 	wed->wlan.offload_disable = mt76_wed_offload_disable;
 	if (!hif2) {
+		pr_debug("mmio not hif2 start mmio wed reset\n");
 		wed->wlan.reset = mt7996_mmio_wed_reset;
 		wed->wlan.reset_complete = mt76_wed_reset_complete;
 	}
 
-	if (mtk_wed_device_attach(wed))
+	if (mtk_wed_device_attach(wed)) {
+		pr_debug("WED mmio device attached\n");
 		return 0;
+	}
 
 	*irq = wed->irq;
 	dev->mt76.dma_dev = wed->dev;
@@ -585,10 +588,14 @@ irqreturn_t mt7996_irq_handler(int irq, void *dev_instance)
 		mt76_wr(dev, MT_INT_MASK_CSR, 0);
 
 	if (dev->hif2) {
-		if (mtk_wed_device_active(&dev->mt76.mmio.wed_hif2))
+		if (mtk_wed_device_active(&dev->mt76.mmio.wed_hif2)) {
 			mtk_wed_device_irq_set_mask(&dev->mt76.mmio.wed_hif2, 0);
-		else
+			pr_debug("WED dev is hif2 and irq_set_mask set\n");
+		}
+		else {
+			pr_debug("WED dev is not hif2 and irq_set_mask set\n");
 			mt76_wr(dev, MT_INT1_MASK_CSR, 0);
+		}
 	}
 
 	if (!test_bit(MT76_STATE_INITIALIZED, &dev->mphy.state))
