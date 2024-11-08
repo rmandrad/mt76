@@ -590,10 +590,8 @@ irqreturn_t mt7996_irq_handler(int irq, void *dev_instance)
 	if (dev->hif2) {
 		if (mtk_wed_device_active(&dev->mt76.mmio.wed_hif2)) {
 			mtk_wed_device_irq_set_mask(&dev->mt76.mmio.wed_hif2, 0);
-			pr_debug("WED dev is hif2 and irq_set_mask set\n");
 		}
 		else {
-			pr_debug("WED dev is not hif2 and irq_set_mask set\n");
 			mt76_wr(dev, MT_INT1_MASK_CSR, 0);
 		}
 	}
