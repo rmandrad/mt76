@@ -319,6 +319,8 @@ static void __mt7996_init_txpower(struct mt7996_phy *phy,
 	int pwr_delta = mt7996_eeprom_get_power_delta(dev, sband->band);
 	struct mt76_power_limits limits;
 
+	dev_warn(dev->mt76.dev, "__mt7996_init_txpower pwr_delta returns %i\n",pwr_delta);
+
 	for (i = 0; i < sband->n_channels; i++) {
 		struct ieee80211_channel *chan = &sband->channels[i];
 		int target_power = mt7996_eeprom_get_target_power(dev, chan);
@@ -333,6 +335,7 @@ static void __mt7996_init_txpower(struct mt7996_phy *phy,
 					target_power);
 		phy->txpower = max(phy->txpower, chan->max_power);
 		chan->orig_mpwr = target_power;
+		dev_warn(dev->mt76.dev, "__mt7996_init_txpower target_power returns %i\n",target_power);
 	}
 }
 

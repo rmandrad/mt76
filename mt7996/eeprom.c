@@ -355,6 +355,7 @@ int mt7996_eeprom_get_target_power(struct mt7996_dev *dev,
 	else
 		target_power = eeprom[MT_EE_TX0_POWER_2G];
 
+	dev_warn(dev->mt76.dev, "mt7996_eeprom_get_target_power returns %i\n",target_power);
 	return target_power;
 }
 
