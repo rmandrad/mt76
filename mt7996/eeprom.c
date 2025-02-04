@@ -28,15 +28,11 @@ static char *mt7996_eeprom_name(struct mt7996_dev *dev)
 	case 0x7992:
 		switch (dev->var.type) {
 		case MT7992_VAR_TYPE_23:
-			dev_warn(dev->mt76.dev, "eeprom 0x7992 MT7992_VAR_TYPE_23\n");
 			if (dev->var.fem == MT7996_FEM_INT)
 				return MT7992_EEPROM_DEFAULT_23_INT;
 			return MT7992_EEPROM_DEFAULT_23;
 		case MT7992_VAR_TYPE_44:
-			dev_warn(dev->mt76.dev, "eeprom 0x7992 MT7992_VAR_TYPE_44\n");
-			return 0;
 		default:
-			dev_warn(dev->mt76.dev, "eeprom 0x7992 MT7992_VAR_TYPE_DEFAULT\n");
 			if (dev->var.fem == MT7996_FEM_INT)
 				return MT7992_EEPROM_DEFAULT_INT;
 			if (dev->var.fem == MT7996_FEM_MIX)
@@ -47,15 +43,11 @@ static char *mt7996_eeprom_name(struct mt7996_dev *dev)
 	default:
 		switch (dev->var.type) {
 		case MT7996_VAR_TYPE_233:
-			dev_warn(dev->mt76.dev, "eeprom 0x7990 MT7996_VAR_TYPE_233\n");
 			if (dev->var.fem == MT7996_FEM_INT)
 				return MT7996_EEPROM_DEFAULT_233_INT;
 			return MT7996_EEPROM_DEFAULT_233;
 		case MT7996_VAR_TYPE_444:
-			dev_warn(dev->mt76.dev, "eeprom 0x7990 MT7996_VAR_TYPE_444\n");
-			return 0;
 		default:
-			dev_warn(dev->mt76.dev, "eeprom 0x7990 MT7996_VAR_TYPE_DEFAULT\n");
 			if (dev->var.fem == MT7996_FEM_INT)
 				return MT7996_EEPROM_DEFAULT_INT;
 			return MT7996_EEPROM_DEFAULT;
@@ -214,6 +206,13 @@ static int mt7996_eeprom_load(struct mt7996_dev *dev)
 				goto out;
 			}
 		}
+
+		/* read tx_power values from fw */
+		u8 *eeprom = dev->mt76.eeprom.data;
+		if (!eeprom[MT_EE_TX0_POWER_2G] || !eeprom[MT_EE_TX0_POWER_5G] || !eeprom[MT_EE_TX0_POWER_6G] ) {
+			use_default = true;
+			goto out;
+		}
 	}
 
 out:
@@ -355,7 +354,6 @@ int mt7996_eeprom_get_target_power(struct mt7996_dev *dev,
 	else
 		target_power = eeprom[MT_EE_TX0_POWER_2G];
 
-	dev_warn(dev->mt76.dev, "mt7996_eeprom_get_target_power returns %i\n",target_power);
 	return target_power;
 }
 
