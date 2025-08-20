@@ -651,11 +651,14 @@ static int mt7996_register_phy(struct mt7996_dev *dev, enum mt76_band_id band)
 
 	INIT_DELAYED_WORK(&mphy->mac_work, mt7996_mac_work);
 
-	ret = mt7996_eeprom_parse_hw_cap(dev, phy);
-	if (ret)
-		goto error;
+        ret = mt7996_eeprom_parse_hw_cap(dev, phy);
+        if (ret)
+                goto error;
 
-	mac_ofs = band == MT_BAND2 ? MT_EE_MAC_ADDR3 : MT_EE_MAC_ADDR2;
+        phy->chip_cap = dev->phy.chip_cap;
+        phy->eml_cap = dev->phy.eml_cap;
+
+        mac_ofs = band == MT_BAND2 ? MT_EE_MAC_ADDR3 : MT_EE_MAC_ADDR2;
 	memcpy(mphy->macaddr, dev->mt76.eeprom.data + mac_ofs, ETH_ALEN);
 	/* Make the extra PHY MAC address local without overlapping with
 	 * the usual MAC address allocation scheme on multiple virtual interfaces
@@ -670,13 +673,17 @@ static int mt7996_register_phy(struct mt7996_dev *dev, enum mt76_band_id band)
 	}
 	mt76_eeprom_override(mphy);
 
-	/* init wiphy according to mphy and phy */
-	mt7996_init_wiphy_band(mphy->hw, phy);
-	ret = mt7996_init_tx_queues(mphy->priv,
-				    MT_TXQ_ID(band),
-				    MT7996_TX_RING_SIZE,
-				    MT_TXQ_RING_BASE(band) + hif1_ofs,
-				    wed);
+        /* init wiphy according to mphy and phy */
+        mt7996_init_wiphy_band(mphy->hw, phy);
+        ret = mt7996_init_mlo_caps(phy);
+        if (ret)
+                goto error;
+
+        ret = mt7996_init_tx_queues(mphy->priv,
+                                    MT_TXQ_ID(band),
+                                    MT7996_TX_RING_SIZE,
+                                    MT_TXQ_RING_BASE(band) + hif1_ofs,
+                                    wed);
 	if (ret)
 		goto error;
 
@@ -1502,11 +1509,15 @@ int mt7996_register_device(struct mt7996_dev *dev)
 	if (ret)
 		return ret;
 
-	mt7996_init_wiphy(hw, &dev->mt76.mmio.wed);
+        mt7996_init_wiphy(hw, &dev->mt76.mmio.wed);
 
-	ret = mt7996_register_phy(dev, MT_BAND1);
-	if (ret)
-		return ret;
+        ret = mt7996_init_mlo_caps(&dev->phy);
+        if (ret)
+                return ret;
+
+        ret = mt7996_register_phy(dev, MT_BAND1);
+        if (ret)
+                return ret;
 
 	ret = mt7996_register_phy(dev, MT_BAND2);
 	if (ret)

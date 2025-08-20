@@ -123,6 +123,9 @@
 #define MT7996_RRO_WINDOW_MAX_SIZE	(MT7996_RRO_WINDOW_MAX_LEN *		\
 					 MT7996_RRO_BA_BITMAP_SESSION_SIZE)
 
+#define MT7996_CHIP_CAP_MLO_EN          BIT(8)
+#define MT7996_CHIP_CAP_MLO_EML_EN      BIT(9)
+
 #define MT7996_RX_BUF_SIZE		(1800 + \
 					 SKB_DATA_ALIGN(sizeof(struct skb_shared_info)))
 #define MT7996_RX_MSDU_PAGE_SIZE	(128 + \
@@ -316,11 +319,14 @@ struct mt7996_phy {
 	u32 ampdu_ref;
 	int txpower;
 
-	struct mt76_mib_stats mib;
-	struct mt76_channel_state state_ts;
+        struct mt76_mib_stats mib;
+        struct mt76_channel_state state_ts;
 
-	u16 orig_chainmask;
-	u16 orig_antenna_mask;
+        u64 chip_cap;
+        u16 eml_cap;
+
+        u16 orig_chainmask;
+        u16 orig_antenna_mask;
 
 	bool has_aux_rx;
 	bool counter_reset;
@@ -588,6 +594,7 @@ void mt7996_init_txpower(struct mt7996_phy *phy);
 int mt7996_txbf_init(struct mt7996_dev *dev);
 void mt7996_reset(struct mt7996_dev *dev);
 int mt7996_run(struct mt7996_phy *phy);
+int mt7996_init_mlo_caps(struct mt7996_phy *phy);
 int mt7996_mcu_init(struct mt7996_dev *dev);
 int mt7996_mcu_init_firmware(struct mt7996_dev *dev);
 int mt7996_mcu_twt_agrt_update(struct mt7996_dev *dev,
