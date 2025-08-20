@@ -47,6 +47,49 @@ int mt7996_run(struct mt7996_phy *phy)
 	return 0;
 }
 
+int mt7996_init_mlo_caps(struct mt7996_phy *phy)
+{
+        struct wiphy *wiphy = phy->mt76->hw->wiphy;
+        static const u8 ext_capa_sta[] = {
+                [2] = WLAN_EXT_CAPA3_MULTI_BSSID_SUPPORT,
+                [7] = WLAN_EXT_CAPA8_OPMODE_NOTIF,
+        };
+        static const u8 ext_capa_ap[] = {
+                [2] = WLAN_EXT_CAPA3_MULTI_BSSID_SUPPORT,
+                [7] = WLAN_EXT_CAPA8_OPMODE_NOTIF,
+        };
+        static struct wiphy_iftype_ext_capab ext_capab[] = {
+                {
+                        .iftype = NL80211_IFTYPE_STATION,
+                        .extended_capabilities = ext_capa_sta,
+                        .extended_capabilities_mask = ext_capa_sta,
+                        .extended_capabilities_len = sizeof(ext_capa_sta),
+                },
+                {
+                        .iftype = NL80211_IFTYPE_AP,
+                        .extended_capabilities = ext_capa_ap,
+                        .extended_capabilities_mask = ext_capa_ap,
+                        .extended_capabilities_len = sizeof(ext_capa_ap),
+                },
+        };
+
+        if (!(phy->chip_cap & MT7996_CHIP_CAP_MLO_EN))
+                return 0;
+
+        ext_capab[0].eml_capabilities = phy->eml_cap;
+        ext_capab[0].mld_capa_and_ops =
+                u16_encode_bits(0, IEEE80211_MLD_CAP_OP_MAX_SIMUL_LINKS);
+        ext_capab[1].eml_capabilities = phy->eml_cap;
+        ext_capab[1].mld_capa_and_ops =
+                u16_encode_bits(0, IEEE80211_MLD_CAP_OP_MAX_SIMUL_LINKS);
+
+        wiphy->flags |= WIPHY_FLAG_SUPPORTS_MLO;
+        wiphy->iftype_ext_capab = ext_capab;
+        wiphy->num_iftype_ext_capab = ARRAY_SIZE(ext_capab);
+
+        return 0;
+}
+
 static int mt7996_start(struct ieee80211_hw *hw)
 {
 	struct mt7996_dev *dev = mt7996_hw_dev(hw);

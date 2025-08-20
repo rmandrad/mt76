@@ -10,6 +10,8 @@
 #include "mac.h"
 #include "eeprom.h"
 
+#define UNI_CHIP_CONFIG_NIC_CAPA 0x3
+
 #define fw_name(_dev, name, ...)	({			\
 	char *_fw;						\
 	switch (mt76_chip(&(_dev)->mt76)) {			\
@@ -3260,6 +3262,83 @@ int mt7996_mcu_fw_dbg_ctrl(struct mt7996_dev *dev, u32 module, u8 level)
 				 sizeof(data), false);
 }
 
+static void
+mt7996_mcu_parse_eml_cap(struct mt7996_dev *dev, u8 *data)
+{
+        struct {
+                u8 rsv[4];
+                __le16 eml_cap;
+                u8 rsv2[6];
+        } __packed *cap = (void *)data;
+
+        dev->phy.eml_cap = le16_to_cpu(cap->eml_cap);
+}
+
+static int mt7996_mcu_get_nic_capability(struct mt7996_dev *dev)
+{
+        struct {
+                u8 _rsv[4];
+
+                __le16 tag;
+                __le16 len;
+        } __packed req = {
+                .tag = cpu_to_le16(UNI_CHIP_CONFIG_NIC_CAPA),
+                .len = cpu_to_le16(sizeof(req) - 4),
+        };
+        struct {
+                __le16 n_element;
+                u8 rsv[2];
+        } __packed *hdr;
+        struct sk_buff *skb;
+        int ret, i;
+
+        ret = mt76_mcu_send_and_get_msg(&dev->mt76,
+                                        MCU_UNI_CMD(CHIP_CONFIG), &req,
+                                        sizeof(req), true, &skb);
+        if (ret)
+                return ret;
+
+        hdr = (void *)skb->data;
+        if (skb->len < sizeof(*hdr)) {
+                ret = -EINVAL;
+                goto out;
+        }
+
+        skb_pull(skb, sizeof(*hdr));
+
+        for (i = 0; i < le16_to_cpu(hdr->n_element); i++) {
+                struct tlv *tlv = (struct tlv *)skb->data;
+                int len;
+
+                if (skb->len < sizeof(*tlv))
+                        break;
+
+                len = le16_to_cpu(tlv->len);
+                if (skb->len < len)
+                        break;
+
+                switch (le16_to_cpu(tlv->tag)) {
+                case MT_NIC_CAP_CHIP_CAP:
+                        dev->phy.chip_cap = le64_to_cpu(*(__le64 *)tlv->data);
+                        break;
+                case MT_NIC_CAP_EML_CAP:
+                        mt7996_mcu_parse_eml_cap(dev, tlv->data);
+                        break;
+                default:
+                        break;
+                }
+
+                skb_pull(skb, len);
+        }
+
+       dev_dbg(dev->mt76.dev,
+               "NIC capabilities: chip=0x%llx eml=0x%x\n",
+               dev->phy.chip_cap, dev->phy.eml_cap);
+out:
+        dev_kfree_skb(skb);
+        return ret;
+}
+
 static int mt7996_mcu_set_mwds(struct mt7996_dev *dev, bool enabled)
 {
 	struct {
@@ -3333,12 +3412,16 @@ int mt7996_mcu_init_firmware(struct mt7996_dev *dev)
 			return ret;
 	}
 
-	ret = mt7996_load_firmware(dev);
-	if (ret)
-		return ret;
+        ret = mt7996_load_firmware(dev);
+        if (ret)
+                return ret;
 
-	set_bit(MT76_STATE_MCU_RUNNING, &dev->mphy.state);
-	ret = mt7996_mcu_fw_log_2_host(dev, MCU_FW_LOG_WM, 0);
+        ret = mt7996_mcu_get_nic_capability(dev);
+        if (ret)
+                return ret;
+
+        set_bit(MT76_STATE_MCU_RUNNING, &dev->mphy.state);
+        ret = mt7996_mcu_fw_log_2_host(dev, MCU_FW_LOG_WM, 0);
 	if (ret)
 		return ret;
 
