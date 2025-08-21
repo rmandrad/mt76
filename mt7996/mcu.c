@@ -3919,6 +3919,9 @@ static void mt7996_mcu_parse_eml_cap(struct mt7996_dev *dev, char *data)
 
 int mt7996_mcu_get_nic_capability(struct mt7996_dev *dev)
 {
+
+#define UNI_CHIP_CONFIG_NIC_CAPA 0x3
+
        struct mt76_phy *mphy = &dev->mt76.phy;
        struct {
                u8 _rsv[4];
