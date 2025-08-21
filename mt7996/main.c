@@ -107,8 +107,13 @@ int mt7996_init_mlo_caps(struct mt7996_phy *phy)
                },
        };
 
-       if (!phy->eml_cap && !phy->mld_cap)
+       if (!phy->eml_cap && !phy->mld_cap) {
+               pr_info("mt7996: firmware lacks MLO capability\n");
                return 0;
+       }
+
+       pr_info("mt7996: enabling MLO (EML 0x%04x, MLD 0x%04x)\n",
+               phy->eml_cap, phy->mld_cap);
 
        ext_capab[0].eml_capabilities = phy->eml_cap;
        ext_capab[0].mld_capa_and_ops = phy->mld_cap;
