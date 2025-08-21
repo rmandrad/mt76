@@ -114,6 +114,7 @@ int mt7996_init_mlo_caps(struct mt7996_phy *phy)
        ext_capab[0].mld_capa_and_ops = phy->mld_cap;
 
        wiphy->flags |= WIPHY_FLAG_SUPPORTS_MLO;
+       ieee80211_hw_set(hw, SUPPORTS_MULTI_LINK);
        wiphy->iftype_ext_capab = ext_capab;
        wiphy->num_iftype_ext_capab = ARRAY_SIZE(ext_capab);
 
