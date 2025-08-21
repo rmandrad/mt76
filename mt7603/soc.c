@@ -48,15 +48,11 @@ mt76_wmac_probe(struct platform_device *pdev)
 
 	return 0;
 error:
-	mt76_free_device(mdev);
+	ieee80211_free_hw(mt76_hw(dev));
 	return ret;
 }
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(6,11,0)
 static int
-#else
-static void
-#endif
 mt76_wmac_remove(struct platform_device *pdev)
 {
 	struct mt76_dev *mdev = platform_get_drvdata(pdev);
@@ -64,9 +60,7 @@ mt76_wmac_remove(struct platform_device *pdev)
 
 	mt7603_unregister_device(dev);
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(6,11,0)
 	return 0;
-#endif
 }
 
 static const struct of_device_id of_wmac_match[] = {

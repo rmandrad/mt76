@@ -5,27 +5,7 @@
 #include <linux/sched.h>
 #include <linux/of.h>
 #include "mt76.h"
-
-#define CHAN2G(_idx, _freq) {			\
-	.band = NL80211_BAND_2GHZ,		\
-	.center_freq = (_freq),			\
-	.hw_value = (_idx),			\
-	.max_power = 30,			\
-}
-
-#define CHAN5G(_idx, _freq) {			\
-	.band = NL80211_BAND_5GHZ,		\
-	.center_freq = (_freq),			\
-	.hw_value = (_idx),			\
-	.max_power = 30,			\
-}
-
-#define CHAN6G(_idx, _freq) {			\
-	.band = NL80211_BAND_6GHZ,		\
-	.center_freq = (_freq),			\
-	.hw_value = (_idx),			\
-	.max_power = 30,			\
-}
+#include "trace.h"
 
 static const struct ieee80211_channel mt76_channels_2ghz[] = {
 	CHAN2G(1, 2412),
@@ -54,6 +34,15 @@ static const struct ieee80211_channel mt76_channels_5ghz[] = {
 	CHAN5G(56, 5280),
 	CHAN5G(60, 5300),
 	CHAN5G(64, 5320),
+
+	CHAN5G(68, 5340),
+	CHAN5G(72, 5360),
+	CHAN5G(76, 5380),
+	CHAN5G(80, 5400),
+	CHAN5G(84, 5420),
+	CHAN5G(88, 5440),
+	CHAN5G(92, 5460),
+	CHAN5G(96, 5480),
 
 	CHAN5G(100, 5500),
 	CHAN5G(104, 5520),
@@ -329,6 +318,11 @@ mt76_init_sband(struct mt76_phy *phy, struct mt76_sband *msband,
 	sband->bitrates = rates;
 	sband->n_bitrates = n_rates;
 
+	/* init parking channel */
+	cfg80211_chandef_create(&phy->chandef, &sband->channels[0],
+				NL80211_CHAN_HT20);
+	phy->main_chandef = phy->chandef;
+
 	if (!ht)
 		return 0;
 
@@ -432,6 +426,8 @@ mt76_phy_init(struct mt76_phy *phy, struct ieee80211_hw *hw)
 	INIT_LIST_HEAD(&phy->tx_list);
 	spin_lock_init(&phy->tx_lock);
 	INIT_DELAYED_WORK(&phy->roc_work, mt76_roc_complete_work);
+	spin_lock_init(&phy->tx_dbg_stats.lock);
+	spin_lock_init(&phy->rx_dbg_stats.lock);
 
 	if ((void *)phy != hw->priv)
 		return 0;
@@ -683,6 +679,7 @@ mt76_alloc_device(struct device *pdev, unsigned int size,
 	spin_lock_init(&dev->cc_lock);
 	spin_lock_init(&dev->status_lock);
 	spin_lock_init(&dev->wed_lock);
+	spin_lock_init(&dev->tx_dbg_stats.lock);
 	mutex_init(&dev->mutex);
 	init_waitqueue_head(&dev->tx_wait);
 
@@ -832,6 +829,7 @@ static void mt76_rx_release_amsdu(struct mt76_phy *phy, enum mt76_rxq_id q)
 	struct sk_buff *skb = phy->rx_amsdu[q].head;
 	struct mt76_rx_status *status = (struct mt76_rx_status *)skb->cb;
 	struct mt76_dev *dev = phy->dev;
+	struct mt76_queue *rxq = &dev->q_rx[q];
 
 	phy->rx_amsdu[q].head = NULL;
 	phy->rx_amsdu[q].tail = NULL;
@@ -856,10 +854,18 @@ static void mt76_rx_release_amsdu(struct mt76_phy *phy, enum mt76_rxq_id q)
 		}
 
 		if (ether_addr_equal(skb->data + offset, rfc1042_header)) {
+			spin_lock_bh(&phy->rx_dbg_stats.lock);
+			phy->rx_dbg_stats.rx_drop[MT_RX_DROP_RFC_PKT]++;
+			spin_unlock_bh(&phy->rx_dbg_stats.lock);
 			dev_kfree_skb(skb);
 			return;
 		}
 	}
+
+	if (mt76_queue_is_wed_rro_data(rxq))
+		q = (dev->hwrro_mode == MT76_HWRRO_V3) ?
+		    MT_RXQ_RRO_IND : MT_RXQ_RRO_RXDMAD_C;
+
 	__skb_queue_tail(&dev->rx_skb[q], skb);
 }
 
@@ -893,14 +899,18 @@ void mt76_rx(struct mt76_dev *dev, enum mt76_rxq_id q, struct sk_buff *skb)
 
 	if (!test_bit(MT76_STATE_RUNNING, &phy->state)) {
 		dev_kfree_skb(skb);
+		spin_lock_bh(&phy->rx_dbg_stats.lock);
+		phy->rx_dbg_stats.rx_drop[MT_RX_DROP_STATE_ERR]++;
+		spin_unlock_bh(&phy->rx_dbg_stats.lock);
 		return;
 	}
 
 #ifdef CONFIG_NL80211_TESTMODE
-	if (phy->test.state == MT76_TM_STATE_RX_FRAMES) {
-		phy->test.rx_stats.packets[q]++;
+	if (!(phy->test.flag & MT_TM_FW_RX_COUNT) &&
+	    phy->test.state == MT76_TM_STATE_RX_FRAMES) {
+		phy->test.rx_stats[q].packets++;
 		if (status->flag & RX_FLAG_FAILED_FCS_CRC)
-			phy->test.rx_stats.fcs_error[q]++;
+			phy->test.rx_stats[q].fcs_error++;
 	}
 #endif
 
@@ -978,6 +988,7 @@ int __mt76_set_channel(struct mt76_phy *phy, struct cfg80211_chan_def *chandef,
 	struct mt76_dev *dev = phy->dev;
 	int timeout = HZ / 5;
 	int ret;
+	unsigned long was_scanning = ieee80211_get_scanning(phy->hw);
 
 	set_bit(MT76_RESET, &phy->state);
 
@@ -996,7 +1007,7 @@ int __mt76_set_channel(struct mt76_phy *phy, struct cfg80211_chan_def *chandef,
 	if (!offchannel)
 		phy->main_chandef = *chandef;
 
-	if (chandef->chan != phy->main_chandef.chan)
+	if (chandef->chan != phy->main_chandef.chan || was_scanning)
 		memset(phy->chan_state, 0, sizeof(*phy->chan_state));
 
 	ret = dev->drv->set_channel(phy);
@@ -1022,6 +1033,7 @@ int mt76_set_channel(struct mt76_phy *phy, struct cfg80211_chan_def *chandef,
 
 	return ret;
 }
+EXPORT_SYMBOL_GPL(mt76_set_channel);
 
 int mt76_update_channel(struct mt76_phy *phy)
 {
@@ -1185,10 +1197,14 @@ mt76_rx_convert(struct mt76_dev *dev, struct sk_buff *skb,
 {
 	struct ieee80211_rx_status *status = IEEE80211_SKB_RXCB(skb);
 	struct ieee80211_hdr *hdr = mt76_skb_get_hdr(skb);
+	struct mt76_phy *phy;
 	struct mt76_rx_status mstat;
+	struct mt76_wcid *wcid;
 
 	mstat = *((struct mt76_rx_status *)skb->cb);
 	memset(status, 0, sizeof(*status));
+
+	skb->priority = mstat.qos_ctl & IEEE80211_QOS_CTL_TID_MASK;
 
 	status->flag = mstat.flag;
 	status->freq = mstat.freq;
@@ -1225,20 +1241,26 @@ mt76_rx_convert(struct mt76_dev *dev, struct sk_buff *skb,
 	memcpy(status->chain_signal, mstat.chain_signal,
 	       sizeof(mstat.chain_signal));
 
-	if (mstat.wcid) {
-		status->link_valid = mstat.wcid->link_valid;
-		status->link_id = mstat.wcid->link_id;
+	wcid = rcu_dereference(dev->wcid[mstat.wcid_idx]);
+	if (wcid && !wcid->sta_disabled) {
+		status->link_valid = wcid->link_valid;
+		status->link_id = wcid->link_id;
 	}
 
-	*sta = wcid_to_sta(mstat.wcid);
+	*sta = wcid_to_sta(wcid);
 	*hw = mt76_phy_hw(dev, mstat.phy_idx);
+
+	phy = mt76_dev_phy(dev, mstat.phy_idx);
+	spin_lock_bh(&phy->rx_dbg_stats.lock);
+	phy->rx_dbg_stats.rx_to_mac80211++;
+	spin_unlock_bh(&phy->rx_dbg_stats.lock);
 }
 
 static void
-mt76_check_ccmp_pn(struct sk_buff *skb)
+mt76_check_ccmp_pn(struct mt76_dev *dev, struct sk_buff *skb)
 {
 	struct mt76_rx_status *status = (struct mt76_rx_status *)skb->cb;
-	struct mt76_wcid *wcid = status->wcid;
+	struct mt76_wcid *wcid;
 	struct ieee80211_hdr *hdr;
 	int security_idx;
 	int ret;
@@ -1249,6 +1271,7 @@ mt76_check_ccmp_pn(struct sk_buff *skb)
 	if (status->flag & RX_FLAG_ONLY_MONITOR)
 		return;
 
+	wcid = rcu_dereference(dev->wcid[status->wcid_idx]);
 	if (!wcid || !wcid->rx_check_pn)
 		return;
 
@@ -1296,7 +1319,7 @@ static void
 mt76_airtime_report(struct mt76_dev *dev, struct mt76_rx_status *status,
 		    int len)
 {
-	struct mt76_wcid *wcid = status->wcid;
+	struct mt76_wcid *wcid;
 	struct ieee80211_rx_status info = {
 		.enc_flags = status->enc_flags,
 		.rate_idx = status->rate_idx,
@@ -1314,6 +1337,7 @@ mt76_airtime_report(struct mt76_dev *dev, struct mt76_rx_status *status,
 	dev->cur_cc_bss_rx += airtime;
 	spin_unlock(&dev->cc_lock);
 
+	wcid = rcu_dereference(dev->wcid[status->wcid_idx]);
 	if (!wcid || !wcid->sta)
 		return;
 
@@ -1347,11 +1371,12 @@ static void
 mt76_airtime_check(struct mt76_dev *dev, struct sk_buff *skb)
 {
 	struct mt76_rx_status *status = (struct mt76_rx_status *)skb->cb;
-	struct mt76_wcid *wcid = status->wcid;
+	struct mt76_wcid *wcid;
 
 	if (!(dev->drv->drv_flags & MT_DRV_SW_RX_AIRTIME))
 		return;
 
+	wcid = rcu_dereference(dev->wcid[status->wcid_idx]);
 	if (!wcid || !wcid->sta) {
 		struct ieee80211_hdr *hdr = mt76_skb_get_hdr(skb);
 
@@ -1390,16 +1415,21 @@ mt76_check_sta(struct mt76_dev *dev, struct sk_buff *skb)
 	struct ieee80211_hdr *hdr = mt76_skb_get_hdr(skb);
 	struct ieee80211_sta *sta;
 	struct ieee80211_hw *hw;
-	struct mt76_wcid *wcid = status->wcid;
+	struct mt76_wcid *wcid = rcu_dereference(dev->wcid[status->wcid_idx]);
 	u8 tidno = status->qos_ctl & IEEE80211_QOS_CTL_TID_MASK;
 	bool ps;
 
 	hw = mt76_phy_hw(dev, status->phy_idx);
 	if (ieee80211_is_pspoll(hdr->frame_control) && !wcid &&
 	    !(status->flag & RX_FLAG_8023)) {
+		if (hw->wiphy->flags & WIPHY_FLAG_SUPPORTS_MLO)
+			return;
+
 		sta = ieee80211_find_sta_by_ifaddr(hw, hdr->addr2, NULL);
-		if (sta)
-			wcid = status->wcid = (struct mt76_wcid *)sta->drv_priv;
+		if (sta) {
+			wcid = (struct mt76_wcid *)sta->drv_priv;
+			status->wcid_idx = wcid->idx;
+		}
 	}
 
 	mt76_airtime_check(dev, skb);
@@ -1463,8 +1493,9 @@ void mt76_rx_complete(struct mt76_dev *dev, struct sk_buff_head *frames,
 	while ((skb = __skb_dequeue(frames)) != NULL) {
 		struct sk_buff *nskb = skb_shinfo(skb)->frag_list;
 
-		mt76_check_ccmp_pn(skb);
+		mt76_check_ccmp_pn(dev, skb);
 		skb_shinfo(skb)->frag_list = NULL;
+		trace_mt76_rx_complete(dev, (struct mt76_rx_status *)skb->cb, 0);
 		mt76_rx_convert(dev, skb, &hw, &sta);
 		ieee80211_rx_list(hw, sta, skb, &list);
 
@@ -1474,6 +1505,7 @@ void mt76_rx_complete(struct mt76_dev *dev, struct sk_buff_head *frames,
 			nskb = nskb->next;
 			skb->next = NULL;
 
+			trace_mt76_rx_complete(dev, (struct mt76_rx_status *)skb->cb, 1);
 			mt76_rx_convert(dev, skb, &hw, &sta);
 			ieee80211_rx_list(hw, sta, skb, &list);
 		}
@@ -1504,7 +1536,7 @@ void mt76_rx_poll_complete(struct mt76_dev *dev, enum mt76_rxq_id q,
 		if (mtk_wed_device_active(&dev->mmio.wed))
 			__skb_queue_tail(&frames, skb);
 		else
-			mt76_rx_aggr_reorder(skb, &frames);
+			mt76_rx_aggr_reorder(dev, skb, &frames);
 	}
 
 	mt76_rx_complete(dev, &frames, napi);
@@ -1524,6 +1556,9 @@ mt76_sta_add(struct mt76_phy *phy, struct ieee80211_vif *vif,
 
 	ret = dev->drv->sta_add(dev, vif, sta);
 	if (ret)
+		goto out;
+
+	if (phy->hw->wiphy->flags & WIPHY_FLAG_SUPPORTS_MLO)
 		goto out;
 
 	for (i = 0; i < ARRAY_SIZE(sta->txq); i++) {
@@ -1554,11 +1589,14 @@ void __mt76_sta_remove(struct mt76_phy *phy, struct ieee80211_vif *vif,
 	struct mt76_wcid *wcid = (struct mt76_wcid *)sta->drv_priv;
 	int i, idx = wcid->idx;
 
-	for (i = 0; i < ARRAY_SIZE(wcid->aggr); i++)
+	for (i = 0; !sta->valid_links && i < ARRAY_SIZE(wcid->aggr); i++)
 		mt76_rx_aggr_stop(dev, wcid, i);
 
 	if (dev->drv->sta_remove)
 		dev->drv->sta_remove(dev, vif, sta);
+
+	if (phy->hw->wiphy->flags & WIPHY_FLAG_SUPPORTS_MLO)
+		return;
 
 	mt76_wcid_cleanup(dev, wcid);
 
@@ -1677,6 +1715,8 @@ void mt76_wcid_cleanup(struct mt76_dev *dev, struct mt76_wcid *wcid)
 		hw = mt76_tx_status_get_hw(dev, skb);
 		ieee80211_free_txskb(hw, skb);
 	}
+
+	rcu_assign_pointer(wcid->def_wcid, NULL);
 }
 EXPORT_SYMBOL_GPL(mt76_wcid_cleanup);
 
@@ -1704,16 +1744,12 @@ s8 mt76_get_power_bound(struct mt76_phy *phy, s8 txpower)
 EXPORT_SYMBOL_GPL(mt76_get_power_bound);
 
 int mt76_get_txpower(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
-		     unsigned int link_id, int *dbm)
+		     int *dbm)
 {
-	struct mt76_phy *phy = mt76_vif_phy(hw, vif);
-	int n_chains, delta;
+	struct mt76_phy *phy = hw->priv;
+	int n_chains = hweight16(phy->chainmask);
+	int delta = mt76_tx_power_path_delta(n_chains);
 
-	if (!phy)
-		return -EINVAL;
-
-	n_chains = hweight16(phy->chainmask);
-	delta = mt76_tx_power_path_delta(n_chains);
 	*dbm = DIV_ROUND_UP(phy->txpower_cur + delta, 2);
 
 	return 0;
@@ -1985,7 +2021,7 @@ enum mt76_dfs_state mt76_phy_dfs_state(struct mt76_phy *phy)
 		return MT_DFS_STATE_DISABLED;
 
 	if (!phy->radar_enabled) {
-		if ((hw->conf.flags & IEEE80211_CONF_MONITOR) &&
+		if (((hw->conf.flags & IEEE80211_CONF_MONITOR) || phy->monitor_vif) &&
 		    (phy->chandef.chan->flags & IEEE80211_CHAN_RADAR))
 			return MT_DFS_STATE_ACTIVE;
 
