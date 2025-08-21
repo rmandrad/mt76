@@ -1508,9 +1508,13 @@ int mt7996_register_device(struct mt7996_dev *dev)
 	if (ret)
 		return ret;
 
-        ret = mt7996_register_phy(dev, MT_BAND2);
-        if (ret)
-                return ret;
+       ret = mt7996_register_phy(dev, MT_BAND2);
+       if (ret)
+               return ret;
+
+       ret = mt7996_mcu_get_nic_capability(dev);
+       if (ret)
+               return ret;
 
        ret = mt7996_init_mlo_caps(&dev->phy);
        if (ret)
