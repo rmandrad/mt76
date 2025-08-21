@@ -92,7 +92,8 @@ static void mt7996_stop(struct ieee80211_hw *hw, bool suspend)
 
 int mt7996_init_mlo_caps(struct mt7996_phy *phy)
 {
-       struct wiphy *wiphy = phy->mt76->hw->wiphy;
+       struct ieee80211_hw *hw = phy->mt76->hw;
+       struct wiphy *wiphy = hw->wiphy;
        static const u8 ext_capa_sta[] = {
                [2] = WLAN_EXT_CAPA3_MULTI_BSSID_SUPPORT,
                [7] = WLAN_EXT_CAPA8_OPMODE_NOTIF,
@@ -106,9 +107,11 @@ int mt7996_init_mlo_caps(struct mt7996_phy *phy)
                },
        };
 
+       if (!phy->eml_cap && !phy->mld_cap)
+               return 0;
+
        ext_capab[0].eml_capabilities = phy->eml_cap;
-       ext_capab[0].mld_capa_and_ops =
-               u16_encode_bits(0, IEEE80211_MLD_CAP_OP_MAX_SIMUL_LINKS);
+       ext_capab[0].mld_capa_and_ops = phy->mld_cap;
 
        wiphy->flags |= WIPHY_FLAG_SUPPORTS_MLO;
        wiphy->iftype_ext_capab = ext_capab;
