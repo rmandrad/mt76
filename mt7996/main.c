@@ -123,6 +123,10 @@ int mt7996_init_mlo_caps(struct mt7996_phy *phy)
        wiphy->iftype_ext_capab = ext_capab;
        wiphy->num_iftype_ext_capab = ARRAY_SIZE(ext_capab);
 
+#ifdef IEEE80211_HW_SUPPORTS_MULTI_LINK
+       ieee80211_hw_set(hw, SUPPORTS_MULTI_LINK);
+#endif
+
        return 0;
 }
 
