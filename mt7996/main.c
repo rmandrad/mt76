@@ -90,9 +90,36 @@ static void mt7996_stop(struct ieee80211_hw *hw, bool suspend)
 {
 }
 
+int mt7996_init_mlo_caps(struct mt7996_phy *phy)
+{
+       struct wiphy *wiphy = phy->mt76->hw->wiphy;
+       static const u8 ext_capa_sta[] = {
+               [2] = WLAN_EXT_CAPA3_MULTI_BSSID_SUPPORT,
+               [7] = WLAN_EXT_CAPA8_OPMODE_NOTIF,
+       };
+       static struct wiphy_iftype_ext_capab ext_capab[] = {
+               {
+                       .iftype = NL80211_IFTYPE_STATION,
+                       .extended_capabilities = ext_capa_sta,
+                       .extended_capabilities_mask = ext_capa_sta,
+                       .extended_capabilities_len = sizeof(ext_capa_sta),
+               },
+       };
+
+       ext_capab[0].eml_capabilities = phy->eml_cap;
+       ext_capab[0].mld_capa_and_ops =
+               u16_encode_bits(0, IEEE80211_MLD_CAP_OP_MAX_SIMUL_LINKS);
+
+       wiphy->flags |= WIPHY_FLAG_SUPPORTS_MLO;
+       wiphy->iftype_ext_capab = ext_capab;
+       wiphy->num_iftype_ext_capab = ARRAY_SIZE(ext_capab);
+
+       return 0;
+}
+
 static inline int get_free_idx(u32 mask, u8 start, u8 end)
 {
-	return ffs(~mask & GENMASK(end, start));
+        return ffs(~mask & GENMASK(end, start));
 }
 
 static int get_omac_idx(enum nl80211_iftype type, u64 mask)

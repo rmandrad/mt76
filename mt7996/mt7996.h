@@ -302,10 +302,12 @@ struct mt7996_phy {
 	u8 throttle_state;
 	u32 throttle_temp[2]; /* 0: critical high, 1: maximum */
 
-	u32 rxfilter;
-	u64 omac_mask;
+       u32 rxfilter;
+       u64 omac_mask;
 
-	u16 noise;
+       u16 eml_cap;
+
+       u16 noise;
 
 	s16 coverage_class;
 	u8 slottime;
@@ -768,6 +770,7 @@ int mt76_dfs_start_rdd(struct mt7996_dev *dev, bool force);
 int mt7996_dfs_init_radar_detector(struct mt7996_phy *phy);
 void mt7996_set_stream_he_eht_caps(struct mt7996_phy *phy);
 void mt7996_set_stream_vht_txbf_caps(struct mt7996_phy *phy);
+int mt7996_init_mlo_caps(struct mt7996_phy *phy);
 void mt7996_update_channel(struct mt76_phy *mphy);
 int mt7996_init_debugfs(struct mt7996_dev *dev);
 void mt7996_debugfs_rx_fw_monitor(struct mt7996_dev *dev, const void *data, int len);

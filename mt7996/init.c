@@ -1508,14 +1508,18 @@ int mt7996_register_device(struct mt7996_dev *dev)
 	if (ret)
 		return ret;
 
-	ret = mt7996_register_phy(dev, MT_BAND2);
-	if (ret)
-		return ret;
+        ret = mt7996_register_phy(dev, MT_BAND2);
+        if (ret)
+                return ret;
 
-	ret = mt76_register_device(&dev->mt76, true, mt76_rates,
-				   ARRAY_SIZE(mt76_rates));
-	if (ret)
-		return ret;
+       ret = mt7996_init_mlo_caps(&dev->phy);
+       if (ret)
+               return ret;
+
+        ret = mt76_register_device(&dev->mt76, true, mt76_rates,
+                                   ARRAY_SIZE(mt76_rates));
+        if (ret)
+                return ret;
 
 	mt7996_for_each_phy(dev, phy)
 		mt7996_thermal_init(phy);
